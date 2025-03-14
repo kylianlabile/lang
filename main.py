@@ -1,6 +1,20 @@
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 import difflib
 import json
 import os
+
+app = FastAPI()
+
+class ExerciseInput(BaseModel):
+    name: str
+    german_text: str
+    english_text: str
+
+class TranslationInput(BaseModel):
+    exercise_name: str
+    user_translation: str
+    sentence_index: int
 
 def get_similarity(user_input, correct_translation):
     sequence = difflib.SequenceMatcher(None, user_input, correct_translation)
@@ -20,77 +34,51 @@ def save_exercise(name, german_text, english_text):
     exercise = {"name": name, "german": german_sentences, "english": english_sentences}
     with open(f"{name}.json", "w", encoding="utf-8") as file:
         json.dump(exercise, file, ensure_ascii=False, indent=4)
-    print(f"Exercise '{name}' saved successfully!")
 
 def list_exercises():
     files = [f for f in os.listdir() if f.endswith(".json")]
-    exercises = {str(i + 1): f[:-5] for i, f in enumerate(files)}
-    return exercises
+    return [f[:-5] for f in files]
 
 def load_exercise(name):
     try:
         with open(f"{name}.json", "r", encoding="utf-8") as file:
             return json.load(file)
     except FileNotFoundError:
-        print("Exercise not found.")
         return None
 
-def translation_exercise(exercise):
-    score = 100
-    total_sentences = len(exercise["english"])
-    correct_count = 0
-    
-    for i, english_sentence in enumerate(exercise["english"]):
-        while True:
-            print(f"Translate the following sentence to German:\n{english_sentence}")
-            user_translation = input("Your translation: ")
-            
-            correct_translation = exercise["german"][i]
-            similarity = get_similarity(user_translation, correct_translation)
-            
-            if user_translation == correct_translation:
-                print("Correct! Moving to the next sentence.")
-                correct_count += 1
-                break
-            else:
-                score -= 10
-                highlighted = highlight_errors(user_translation, correct_translation)
-                print(f"Incorrect. The correct translation is: {correct_translation}")
-                print(f"Your errors highlighted: {highlighted}")
-        
-        progress = (correct_count / total_sentences) * 100
-        print(f"Progress: {progress:.2f}%\n")
-    
-    print("Exercise complete! Your final score is:", score)
+@app.post("/create_exercise/")
+def create_exercise(exercise: ExerciseInput):
+    save_exercise(exercise.name, exercise.german_text, exercise.english_text)
+    return {"message": f"Exercise '{exercise.name}' created successfully!"}
 
-def main():
-    print("Translation Learning Program")
-    while True:
-        choice = input("Would you like to create a new exercise (N) or open an existing one (O)? (Q to quit): ").strip().lower()
-        if choice == 'n':
-            name = input("Enter a name for your exercise: ").strip()
-            english_text = input("Enter a full English paragraph or essay: ").strip()
-            german_text = input("Enter the corresponding German translation: ").strip()
-            save_exercise(name, german_text, english_text)
-        elif choice == 'o':
-            exercises = list_exercises()
-            if not exercises:
-                print("No exercises found.")
-                continue
-            print("Available Exercises:")
-            for num, ex_name in exercises.items():
-                print(f"{num}. {ex_name}")
-            selection = input("Select an exercise by number: ").strip()
-            if selection in exercises:
-                exercise = load_exercise(exercises[selection])
-                if exercise:
-                    translation_exercise(exercise)
-            else:
-                print("Invalid selection.")
-        elif choice == 'q':
-            break
-        else:
-            print("Invalid choice. Please enter 'N', 'O', or 'Q'.")
+@app.get("/list_exercises/")
+def get_exercises():
+    exercises = list_exercises()
+    return {"exercises": exercises}
 
-if __name__ == "__main__":
-    main()
+@app.get("/get_exercise/{name}")
+def get_exercise(name: str):
+    exercise = load_exercise(name)
+    if not exercise:
+        raise HTTPException(status_code=404, detail="Exercise not found")
+    return exercise
+
+@app.post("/check_translation/")
+def check_translation(data: TranslationInput):
+    exercise = load_exercise(data.exercise_name)
+    if not exercise:
+        raise HTTPException(status_code=404, detail="Exercise not found")
+    
+    if data.sentence_index >= len(exercise["english"]):
+        raise HTTPException(status_code=400, detail="Invalid sentence index")
+    
+    correct_translation = exercise["german"][data.sentence_index]
+    if data.user_translation == correct_translation:
+        return {"correct": True, "message": "Correct! Moving to the next sentence."}
+    else:
+        highlighted = highlight_errors(data.user_translation, correct_translation)
+        return {"correct": False, "message": "Incorrect translation.", "correct_translation": correct_translation, "errors": highlighted}
+
+@app.get("/")
+def root():
+    return {"message": "Translation Learning API is running!"}
