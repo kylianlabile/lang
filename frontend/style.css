@@ -1,0 +1,19 @@
+body {
+    font-family: sans-serif;
+    padding: 20px;
+}
+
+#exerciseList button {
+    margin: 5px;
+    padding: 8px 15px;
+    cursor: pointer;
+}
+
+#exerciseArea {
+    margin-top: 20px;
+}
+
+#feedback {
+    margin-top: 10px;
+    font-weight: bold;
+}
