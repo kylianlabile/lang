@@ -3,8 +3,22 @@ from pydantic import BaseModel
 import difflib
 import json
 import os
+from fastapi.middleware.cors import CORSMiddleware
+
 
 app = FastAPI()
+origins = [
+    "https://github.com/kylianlabile/lang", #replace with your github pages url.
+    # Add other origins if needed
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class ExerciseInput(BaseModel):
     name: str
